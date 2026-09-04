@@ -32,12 +32,44 @@ export interface InitializeResult {
   serverInfo: { name: string; version: string }
 }
 
+/** One named prompt section carried inside a structured run context. */
+export interface RunContextSection {
+  /** Stable section name; rendered in array order by the consumer plugin. */
+  name: string
+  /** Pre-composed section text supplied by the driving application. */
+  text: string
+}
+
+/**
+ * Structured, application-trusted context for one run. The driving app owns
+ * composition and persistence; the host only renders it into per-session
+ * prompt sections. Optional on `session/prompt` so plain SDK clients are
+ * unaffected.
+ */
+export interface RunContextPayload {
+  /** Merchant scope of the run; rendered for audit, never a tool input. */
+  merchantId: string
+  /** Customer scope of the run; null when the run has no consumer scope. */
+  customerId: string | null
+  /** Agent profile key that selected the composed sections. */
+  agentProfileKey: string
+  /** Ordered prompt sections rendered as per-session system-prompt content. */
+  sections: RunContextSection[]
+}
+
 /** One user turn on one SDK session. */
 export interface SessionPromptParams {
   /** The SDK-side session id; an unknown id lazily creates the agent+session pair. */
   sessionId: string
   /** The prompt content blocks, sent verbatim as the user message. */
   contentBlocks: SdkPromptContentBlock[]
+  /**
+   * Structured run context for this turn's session. Provided by deployments
+   * whose driving application composes sections app-side; the server retains
+   * the latest value per session and exposes it through the `sdkRunContext`
+   * service for context-assembly plugins.
+   */
+  runContext?: RunContextPayload
 }
 
 /** Inline raster input admitted into the runtime's durable attachment store. */

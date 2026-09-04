@@ -61,6 +61,13 @@ export function apply(ctx: Context, config: JsonRpcConfig): void {
     maxTokensAsSuccess: resolvedConfig.maxTokensAsSuccess,
   })
 
+  // Context-assembly plugins resolve per-session run contexts through this
+  // service; the server owns the session-id to record mapping.
+  ctx.provide('sdkRunContext', {
+    forAgentSession: (session: { readonly id: string }) =>
+      server.runContextForAgentSession(session),
+  })
+
   // Share one exit task so racing shutdown requests cannot dispose the root or
   // exit the process more than once.
   let exitTask: Promise<void> | undefined

@@ -20,6 +20,7 @@ import type {
   InitializeParams,
   InitializeResult,
   JsonRpcTransportPeer,
+  RunContextPayload,
   SessionEventNotification,
   SessionPromptParams,
   SessionPromptResult,
@@ -30,6 +31,8 @@ import type {
 
 interface SessionRecord {
   handle: AgentHandle
+  /** Latest structured run context delivered on a prompt of this session. */
+  runContext?: RunContextPayload
 }
 
 function encodedImage(block: SessionPromptParams['contentBlocks'][number]): block is SdkEncodedImageBlock {
@@ -176,6 +179,7 @@ export class HarnessSdkJsonRpcServer {
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
     if (!this.initialized) throw new Error('SDK server is not initialized')
     const rec = await this.getOrCreateSession(params.sessionId)
+    if (params.runContext !== undefined) rec.runContext = params.runContext
     // An agent-loop-only reload disposes the loop's agents while this record
     // survives; a retained agent accepts followup() silently, so validate the
     // record against the live registry before delivery.
@@ -196,6 +200,15 @@ export class HarnessSdkJsonRpcServer {
     if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
       throw new Error(`session agent was disposed outside the server: ${sessionId}`)
     }
+  }
+
+  /**
+   * Latest structured run context recorded for the session backing this agent,
+   * or undefined when the driving application sent no run context. Consumed by
+   * the `sdkRunContext` service exposed to context-assembly plugins.
+   */
+  runContextForAgentSession(session: { readonly id: string }): RunContextPayload | undefined {
+    return this.sessions.get(session.id)?.runContext
   }
 
   /**

@@ -174,10 +174,13 @@ class HarnessClient:
         session_id: str,
         content_blocks: list[JsonObject],
         *,
+        run_context: JsonObject | None = None,
         on_notification: Callable[[Notification], None] | None = None,
         notification_subscription: "NotificationSubscription | None" = None,
     ) -> str:
         payload: JsonObject = {"sessionId": session_id, "contentBlocks": content_blocks}
+        if run_context is not None:
+            payload["runContext"] = run_context
         response = self.request(
             "session/prompt",
             payload,
