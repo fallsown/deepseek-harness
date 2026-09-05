@@ -9,8 +9,17 @@
  * @module @deepseek-ai/dsh-credit-context-assembly
  */
 
+import { appendFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { RunContextPayload } from '@deepseek-ai/dsh-sdk-protocol'
+
+const DEBUG_LOG = '/tmp/credit-debug.log'
+
+function debug(line: string): void {
+  try {
+    appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${line}\n`)
+  } catch {}
+}
 
 export const name = 'credit-context-assembly'
 
@@ -54,17 +63,25 @@ export function renderRunContext(runContext: RunContextPayload): string {
  * @param ctx - plugin context; `systemPrompt` and `sdkRunContext` are declared in `inject`.
  * @param _config - unused; the slice has no tunables.
  */
-export function apply(ctx: Context, _config : Config = {}): void {
+export function apply(ctx: Context, _config: Config = {}): void {
+  debug(`apply: entered, systemPrompt=${typeof (ctx as Context & { systemPrompt?: SystemPromptService }).systemPrompt}`)
   const systemPrompt = (ctx as Context & { systemPrompt: SystemPromptService }).systemPrompt
   const runContextService = (ctx as Context & { sdkRunContext: RunContextService }).sdkRunContext
+  debug(`apply: runContextService=${typeof runContextService}`)
   systemPrompt.section({
     name: 'credit:run-context',
     order: systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA') + 1,
     text: (context) => {
+      debug(
+        `text: agent=${context.agent === undefined ? 'undefined' : 'present'} ` +
+          `sessionId=${context.agent?.session?.id ?? 'null'}`,
+      )
       if (context.agent === undefined) return ''
       const runContext = runContextService.forAgentSession(context.agent.session)
+      debug(`text: runContext=${runContext === undefined ? 'MISSING' : `sections=${runContext.sections.length}`}`)
       if (runContext === undefined) return ''
       return renderRunContext(runContext)
     },
   })
+  debug('apply: section registered')
 }

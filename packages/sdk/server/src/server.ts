@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { appendFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
@@ -178,8 +179,15 @@ export class HarnessSdkJsonRpcServer {
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
     if (!this.initialized) throw new Error('SDK server is not initialized')
-    const rec = await this.getOrCreateSession(params.sessionId)
-    if (params.runContext !== undefined) rec.runContext = params.runContext
+    // runContext must be recorded BEFORE the agent/session is created: the
+    // system prompt (and its context sections) is assembled during agent
+    // bootstrap, so a section reading the store at creation time sees it.
+    try {
+      const fs = await import('node:fs')
+      fs.appendFileSync('/tmp/credit-debug.log',
+        `prompt: runContext=${params.runContext === undefined ? 'ABSENT' : `sections=${params.runContext.sections.length}`}\n`)
+    } catch {}
+    const rec = await this.getOrCreateSession(params.sessionId, params.runContext)
     // An agent-loop-only reload disposes the loop's agents while this record
     // survives; a retained agent accepts followup() silently, so validate the
     // record against the live registry before delivery.
@@ -208,6 +216,10 @@ export class HarnessSdkJsonRpcServer {
    * the `sdkRunContext` service exposed to context-assembly plugins.
    */
   runContextForAgentSession(session: { readonly id: string }): RunContextPayload | undefined {
+    try {
+      appendFileSync('/tmp/credit-debug.log',
+        `lookup: session.id=${session.id} known=[${[...this.sessions.keys()].join(',')}] stored=${this.sessions.get(session.id)?.runContext === undefined ? 'MISSING' : 'PRESENT'}\n`)
+    } catch {}
     return this.sessions.get(session.id)?.runContext
   }
 
@@ -269,13 +281,16 @@ export class HarnessSdkJsonRpcServer {
     }
   }
 
-  private async getOrCreateSession(sessionId: string): Promise<SessionRecord> {
+  private async getOrCreateSession(sessionId: string, runContext?: RunContextPayload): Promise<SessionRecord> {
     if (this.shuttingDown) throw new Error('SDK server is shutting down')
     const existing = this.sessions.get(sessionId)
-    if (existing) return existing
+    if (existing) {
+      if (runContext !== undefined) existing.runContext = runContext
+      return existing
+    }
     const pending = this.sessionCreations.get(sessionId)
     if (pending) return pending
-    const creation = this.createSession(sessionId)
+    const creation = this.createSession(sessionId, runContext)
     this.sessionCreations.set(sessionId, creation)
     void creation.then(
       () => { this.sessionCreations.delete(sessionId) },
@@ -284,11 +299,17 @@ export class HarnessSdkJsonRpcServer {
     return creation
   }
 
-  private async createSession(sessionId: string): Promise<SessionRecord> {
+  private async createSession(sessionId: string, runContext?: RunContextPayload): Promise<SessionRecord> {
     // No preset composition: this server's compositions keep the model-facing
     // rows in the host plane, so this agent reads them from the global layer. A
     // deployment that configures a roster has to join one here first
     // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
+    // Register the record (with runContext) BEFORE agent creation: the agent
+    // bootstrap assembles the system prompt, and context sections read the
+    // store at that moment.
+    const rec: SessionRecord = { handle: undefined as unknown as AgentHandle }
+    if (runContext !== undefined) rec.runContext = runContext
+    this.sessions.set(sessionId, rec)
     const handle = await this.ctx.agents.create({
       sessionId: brandString<SessionId>(sessionId),
       meta: { cwd: this.cwd },
@@ -299,8 +320,7 @@ export class HarnessSdkJsonRpcServer {
         ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
       },
     })
-    const rec: SessionRecord = { handle }
-    this.sessions.set(sessionId, rec)
+    rec.handle = handle
     return rec
   }
 
