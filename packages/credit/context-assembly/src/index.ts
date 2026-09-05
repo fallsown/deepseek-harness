@@ -54,7 +54,7 @@ export function renderRunContext(runContext: RunContextPayload): string {
  * @param ctx - plugin context; `systemPrompt` and `sdkRunContext` are declared in `inject`.
  * @param _config - unused; the slice has no tunables.
  */
-export function apply(ctx: Context, _config: Config = {}): void {
+export function apply(ctx: Context, _config : Config = {}): void {
   const systemPrompt = (ctx as Context & { systemPrompt: SystemPromptService }).systemPrompt
   const runContextService = (ctx as Context & { sdkRunContext: RunContextService }).sdkRunContext
   systemPrompt.section({

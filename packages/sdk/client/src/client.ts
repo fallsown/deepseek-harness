@@ -18,6 +18,7 @@ import {
   JsonRpcResponseError,
   type InitializeParams,
   type InitializeResult,
+  type RunContextPayload,
   type SessionPromptParams,
   type SdkPromptContentBlock,
 } from '@deepseek-ai/dsh-sdk-protocol'
@@ -288,8 +289,16 @@ export class HarnessClient {
    * @param contentBlocks - the user message, sent verbatim.
    * @returns the queued message id.
    */
-  async prompt(sessionId: string, contentBlocks: SdkPromptContentBlock[]): Promise<string> {
-    const params: SessionPromptParams = { sessionId, contentBlocks }
+  async prompt(
+    sessionId: string,
+    contentBlocks: SdkPromptContentBlock[],
+    runContext?: RunContextPayload,
+  ): Promise<string> {
+    const params: SessionPromptParams = {
+      sessionId,
+      contentBlocks,
+      ...(runContext === undefined ? {} : { runContext }),
+    }
     const result = await this.request('session/prompt', { ...params })
     if (!isRecord(result) || typeof result.messageId !== 'string') {
       throw new SdkProtocolError(`session/prompt returned no message id: ${JSON.stringify(result)}`)

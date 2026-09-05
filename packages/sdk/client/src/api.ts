@@ -148,10 +148,12 @@ export function createProcessDeepSeekHarness(
   }, () => createProcessHarnessClient(runtime))
 }
 
-/** Per-run options: target session and streaming observer. */
+/** Per-run options: target session, structured run context, streaming observer. */
 export interface RunOptions {
   /** Session id to run on; omitted mints a fresh session per call. */
   sessionId?: string
+  /** Structured run context rendered by the context-assembly plugin (stage-2). */
+  runContext?: RunContextPayload
   /** Observer invoked with every notification for this session tree, in wire order. */
   onNotification?: (notification: HarnessNotification) => void
 }
@@ -173,7 +175,10 @@ export class HarnessSession {
    * @returns the owned activity interval; rejects on transport loss, timeout,
    * or a protocol error.
    */
-  async run(input: string | SdkPromptContentBlock[], options?: Pick<RunOptions, 'onNotification'>): Promise<RunResult> {
+  async run(
+    input: string | SdkPromptContentBlock[],
+    options?: Pick<RunOptions, 'onNotification' | 'runContext'>,
+  ): Promise<RunResult> {
     await this.harness.start()
     const client = this.harness.client
     const contentBlocks = normalizeInput(input)
@@ -196,7 +201,7 @@ export class HarnessSession {
       options?.onNotification?.(notification)
     }
     try {
-      const messageId = await client.prompt(this.id, contentBlocks)
+      const messageId = await client.prompt(this.id, contentBlocks, options?.runContext)
       let received = false
       while (true) {
         const notification = await subscription.next()
