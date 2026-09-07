@@ -562,7 +562,11 @@ export class DeepSeekAdapter extends LlmAdapter {
     const requestImages = attachments === undefined || model === undefined
       ? new Map<AttachmentId, RequestImageAttachment>()
       : await prepareRequestImages(requestOptions, attachments, model, signal)
-    let representation: 'file' | 'base64' = 'file'
+    // 视觉输入模型（catalog 声明 image modality）必须内联 base64：Files API 的
+    // {type:'file', file_id} 引用不向这类模型提供画面内容，模型只能看到文件引用文本；
+    // base64 image_url 是它们唯一可靠的图片 wire 形态。file 路径保留给其余模型。
+    const imageNativeModel = model?.inputModalities?.includes('image') ?? false
+    let representation: 'file' | 'base64' = imageNativeModel ? 'base64' : 'file'
     let fileAttempt = 0
     while (true) {
       const usedFiles: UsedRequestFile[] = []
